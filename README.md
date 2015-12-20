@@ -1,3 +1,3 @@
-# Ship Noise
+# Ship Scraper
 
-A set of scripts for calculating the noise of ships.
+A Python tool to scrape ship information.

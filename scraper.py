@@ -1,70 +1,141 @@
+import csv
+import time
+
 import lxml.html
 import requests
+
+from cache import Cache
 
 
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_0) ' \
              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 ' \
              'Safari/537.36'
+RATE_LIMIT_SLEEP = 0.01
+CACHE = Cache()
 
 
-def connect_to_database():
-    """Connect to the database."""
+def find_ship_url(mmsi):
+    """Find the URL of a ship with this MMSI."""
 
-    print('Connecting to the database.')
+    if CACHE.has('url', mmsi):
+        return CACHE.get('url', mmsi)
+
+    print('>', 'Finding ship:', mmsi)
+
+    url = 'https://www.vesselfinder.com/vessels/livesearch'
+    params = {'term': str(mmsi)}
+    headers = {'User-Agent': USER_AGENT}
+
+    response = requests.get(url, params=params, headers=headers)
+    json = response.json()
+
+    def find_result():
+        for result in json['list']:
+            if result['MMSI'] == str(mmsi):
+                return result
+
+    data = find_result()
+
+    if data is None:
+        url = None
+    else:
+        name = data['NAME'] \
+            .replace(' ', '-') \
+            .replace(':', '-') \
+            .replace('+', '-') \
+            .replace('.', '') \
+            .replace('!', '') \
+            .replace('(', '') \
+            .replace(')', '') \
+            .replace('*', '') \
+            .replace(',', '') \
+            .replace('/', '') \
+            .replace('\\', '') \
+            .replace("'", '') \
+            .replace('"', '') \
+            .replace('[', '') \
+            .replace(']', '') \
+            .replace('^', '') \
+            .replace(';', '')
+
+        url = 'https://www.vesselfinder.com/vessels/{0}-IMO-{1}-MMSI-{2}' \
+            .format(name, data['IMO'], data['MMSI'])
+
+    CACHE.set('url', mmsi, url)
+
+    time.sleep(RATE_LIMIT_SLEEP)  # rate limiting
+
+    return url
 
 
-def get_ships_with_missing_details(database):
-    """
-    Get an iterator over the MMSI and IMO of ships that have missing details.
-    """
-
-    print('Finding all ships with missing information.')
-
-    return []
-
-
-
-
-def scrape_information(name, mmsi, imo):
+def scrape_information(mmsi, imo, name):
     """Scrape information about a particular ship."""
 
-    print('Scraping information about ship: Name={0}, MMSI={1}, IMO={2}'
-          .format(name, mmsi, imo))
+    if CACHE.has('ship', mmsi):
+        return CACHE.get('ship', mmsi)
 
-    name = name.upper().replace('/', '')
-    imo = 0 if imo is None else imo
+    url = find_ship_url(mmsi)
 
-    url = 'https://www.vesselfinder.com/vessels/{0}-IMO-{1}-MMSI-{2}' \
-        .format(name, imo, mmsi)
+    if url is None:
+        return None
+
+    print('>', 'Scraping:', url)
 
     response = requests.get(url, headers={'User-Agent': USER_AGENT})
-    page = lxml.html.fromstring(response.content)
+    content = response.content
+
+    page = lxml.html.fromstring(content)
 
     vehicle = page.xpath('//article[@itemtype="http://schema.org/Vehicle"]')[0]
 
+    vesselfinder_name = vehicle.xpath('//h1[@itemprop="name"]')[0].text_content()
     gross_tonnage = vehicle.xpath('//*[@itemprop="weight"]')[0].text_content()
+    net_tonnage = vehicle.xpath('//*[@itemprop="cargoVolume"]')[0].text_content()
 
-    return gross_tonnage
+    imo = None if imo == 0 else imo
+    gross_tonnage = None if gross_tonnage == 'N/A' else int(gross_tonnage[:-2])
+    net_tonnage = None if net_tonnage == 'N/A' else int(net_tonnage[:-2])
 
+    info = (mmsi, imo, name, vesselfinder_name, gross_tonnage, net_tonnage)
 
+    CACHE.set('ship', mmsi, info)
 
-def update_ship_information(database, mmsi, info):
-    """Update the ship information in the database for a particular ship."""
+    time.sleep(RATE_LIMIT_SLEEP)  # rate limiting
 
-    print('Updating ship information for ship: MMSI={0}, info={1}'
-          .format(mmsi, info))
+    return info
 
 
 def main():
     """Run the script."""
 
-    database = connect_to_database()
-    for mmsi, imo in get_ships_with_missing_details(database):
-        info = scrape_information(mmsi, imo)
-        update_ship_information(database, mmsi, info)
+    from argparse import ArgumentParser
 
-    print(scrape_information('QUO/VADIS', 244710370, None))
+    parser = ArgumentParser()
+    parser.add_argument('input_csv')
+    parser.add_argument('output_csv')
+    args = parser.parse_args()
 
+    with open(args.input_csv) as infile, open(args.output_csv, 'w') as outfile:
+        reader = csv.reader(infile)
+        writer = csv.writer(outfile)
+
+        rows = list(reader)
+        no_records = len(rows)
+
+        for i, row in enumerate(rows):
+            mmsi = int(row[0])
+            imo = int(row[1])
+            name = row[2].strip()
+
+            percentage = round((i / no_records) * 100, 3)
+
+            print('*', 'Entry', i + 1, 'of', no_records, '-', percentage, '%')
+
+            info = scrape_information(mmsi, imo, name)
+            if info is None:
+                print('!', mmsi, 'not found.')
+            else:
+                writer.writerow(info)
 
 
 if __name__ == '__main__':

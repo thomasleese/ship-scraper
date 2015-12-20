@@ -40,10 +40,10 @@ def find_ship_url(mmsi):
         url = None
     else:
         name = data['NAME'] \
+            .replace(' & ', '-') \
             .replace(' ', '-') \
             .replace(':', '-') \
             .replace('+', '-') \
-            .replace('-&-', '-') \
             .replace('.', '') \
             .replace('!', '') \
             .replace('(', '') \

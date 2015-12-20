@@ -43,7 +43,7 @@ def find_ship_url(mmsi):
             .replace(' ', '-') \
             .replace(':', '-') \
             .replace('+', '-') \
-            .replace(' & ', '-') \
+            .replace('-&-', '-') \
             .replace('.', '') \
             .replace('!', '') \
             .replace('(', '') \

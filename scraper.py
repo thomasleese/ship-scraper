@@ -66,7 +66,8 @@ def find_ship_url(mmsi):
             .replace('>', '') \
             .replace('<', '') \
             .replace('$', '') \
-            .replace('&', '')
+            .replace('&', '') \
+            .replace('%', '')
 
         url = 'https://www.vesselfinder.com/vessels/{0}-IMO-{1}-MMSI-{2}' \
             .format(name, data['IMO'], data['MMSI'])

@@ -90,6 +90,8 @@ def scrape_information(mmsi, imo, name):
     print('>', 'Scraping:', url)
 
     response = requests.get(url, headers={'User-Agent': USER_AGENT})
+    response.raise_for_status()
+
     content = response.content
 
     page = lxml.html.fromstring(content)

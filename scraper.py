@@ -1,7 +1,9 @@
 import csv
+import sys
 import time
 
 import lxml.html
+import progressbar
 import requests
 
 from cache import Cache
@@ -124,22 +126,21 @@ def main():
         writer = csv.writer(outfile)
 
         rows = list(reader)
-        no_records = len(rows)
 
-        for i, row in enumerate(rows):
+        progress = progressbar.ProgressBar(redirect_stdout=True)
+
+        for row in progress(rows):
             mmsi = int(row[0])
             imo = int(row[1])
             name = row[2].strip()
-
-            percentage = round((i / no_records) * 100, 3)
-
-            print('*', 'Entry', i + 1, 'of', no_records, '-', percentage, '%')
 
             info = scrape_information(mmsi, imo, name)
             if info is None:
                 print('!', mmsi, 'not found.')
             else:
                 writer.writerow(info)
+
+            sys.stdout.flush()
 
 
 if __name__ == '__main__':

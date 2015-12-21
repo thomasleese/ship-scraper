@@ -1,5 +1,4 @@
 import csv
-import sys
 import time
 
 import lxml.html
@@ -12,15 +11,25 @@ from cache import Cache
 USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_0) ' \
              'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 ' \
              'Safari/537.36'
-RATE_LIMIT_SLEEP = 0.01
-CACHE = Cache()
+
+rate_limit_sleep_count = 0
 
 
-def find_ship_url(mmsi):
+def rate_limit_sleep():
+    global rate_limit_sleep_count
+
+    rate_limit_sleep_count += 1
+
+    if rate_limit_sleep_count >= 100:
+        time.sleep(1)
+        rate_limit_sleep_count = 0
+
+
+def find_ship_url(cache, mmsi):
     """Find the URL of a ship with this MMSI."""
 
-    if CACHE.has('url', mmsi):
-        return CACHE.get('url', mmsi)
+    if cache.has('url', mmsi):
+        return cache.get('url', mmsi)
 
     print('>', 'Finding ship:', mmsi)
 
@@ -72,20 +81,20 @@ def find_ship_url(mmsi):
         url = 'https://www.vesselfinder.com/vessels/{0}-IMO-{1}-MMSI-{2}' \
             .format(name, data['IMO'], data['MMSI'])
 
-    CACHE.set('url', mmsi, url)
+    cache.set('url', mmsi, url)
 
-    time.sleep(RATE_LIMIT_SLEEP)  # rate limiting
+    rate_limit_sleep()
 
     return url
 
 
-def scrape_information(mmsi, imo, name):
+def scrape_information(cache, mmsi, imo, name):
     """Scrape information about a particular ship."""
 
-    if CACHE.has('ship', mmsi):
-        return CACHE.get('ship', mmsi)
+    if cache.has('ship', mmsi):
+        return cache.get('ship', mmsi)
 
-    url = find_ship_url(mmsi)
+    url = find_ship_url(cache, mmsi)
 
     if url is None:
         return None
@@ -111,9 +120,9 @@ def scrape_information(mmsi, imo, name):
 
     info = (mmsi, imo, name, vesselfinder_name, gross_tonnage, net_tonnage)
 
-    CACHE.set('ship', mmsi, info)
+    cache.set('ship', mmsi, info)
 
-    time.sleep(RATE_LIMIT_SLEEP)  # rate limiting
+    rate_limit_sleep()
 
     return info
 
@@ -128,7 +137,23 @@ def main():
     parser.add_argument('output_csv')
     args = parser.parse_args()
 
-    with open(args.input_csv) as infile, open(args.output_csv, 'w') as outfile:
+    done_ships = set()
+
+    # first we load the existing data to see which ships we've already done
+    with open(args.output_csv) as file:
+        reader = csv.reader(file)
+        for row in reader:
+            mmsi = int(row[0])
+            done_ships.add(mmsi)
+
+    print(len(done_ships), 'ships already done.')
+
+    # next we load up the cache
+    cache = Cache()
+    print(len(cache), 'cache entries.')
+
+    # next we load the input file and start progressing through the scripts
+    with open(args.input_csv) as infile, open(args.output_csv, 'a') as outfile:
         reader = csv.reader(infile)
         writer = csv.writer(outfile)
 
@@ -141,13 +166,14 @@ def main():
             imo = int(row[1])
             name = row[2].strip()
 
-            info = scrape_information(mmsi, imo, name)
+            if mmsi in done_ships:
+                continue
+
+            info = scrape_information(cache, mmsi, imo, name)
             if info is None:
                 print('!', mmsi, 'not found.')
             else:
                 writer.writerow(info)
-
-            sys.stdout.flush()
 
 
 if __name__ == '__main__':

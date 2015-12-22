@@ -91,9 +91,6 @@ def find_ship_url(cache, mmsi):
 def scrape_information(cache, mmsi, imo, name):
     """Scrape information about a particular ship."""
 
-    if cache.has('ship', mmsi):
-        return cache.get('ship', mmsi)
-
     url = find_ship_url(cache, mmsi)
 
     if url is None:
@@ -119,8 +116,6 @@ def scrape_information(cache, mmsi, imo, name):
     net_tonnage = None if net_tonnage == 'N/A' else int(net_tonnage[:-2])
 
     info = (mmsi, imo, name, vesselfinder_name, gross_tonnage, net_tonnage)
-
-    cache.set('ship', mmsi, info)
 
     rate_limit_sleep()
 

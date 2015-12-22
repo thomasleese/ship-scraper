@@ -5,6 +5,7 @@ class Cache(dict):
     def __init__(self):
         super().__init__()
 
+        self._save_count = 100
         self._stop_saving = False
 
         self.load()
@@ -22,14 +23,21 @@ class Cache(dict):
         self._stop_saving = False
 
     def save(self):
+        if self._stop_saving:
+            return
+
+        self._save_count -= 1
+        if self._save_count > 0:
+            return
+
         with open('cache.json', 'w') as file:
             file.write(json.dumps(self, indent=2))
 
+        self._save_count = 100
+
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
-
-        if not self._stop_saving:
-            self.save()
+        self.save()
 
     def make_key(self, args):
         return '.'.join(str(arg) for arg in args)

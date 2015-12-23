@@ -105,7 +105,10 @@ def scrape_information(cache, mmsi, imo, name):
 
     page = lxml.html.fromstring(content)
 
-    vehicle = page.xpath('//article[@itemtype="http://schema.org/Vehicle"]')[0]
+    try:
+        vehicle = page.xpath('//article[@itemtype="http://schema.org/Vehicle"]')[0]
+    except IndexError:
+        raise ValueError('Invalid ship: {}'.format(url))
 
     vesselfinder_name = vehicle.xpath('//h1[@itemprop="name"]')[0].text_content()
     gross_tonnage = vehicle.xpath('//*[@itemprop="weight"]')[0].text_content()
